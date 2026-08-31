@@ -1,0 +1,141 @@
+### ====================================================================
+### ORDER & INVENTORY MANAGEMENT SYSTEM - HTTP API CLIENT REQUESTS
+### ====================================================================
+### Base URLs:
+### API Gateway    : http://localhost:8080
+### Order Service  : http://localhost:8081
+### Inventory Svc  : http://localhost:8082
+### Notification   : http://localhost:8083
+### Eureka Server  : http://localhost:8761
+### Kafka UI       : http://localhost:8085
+### ====================================================================
+
+### 1. AUTHENTICATION (API Gateway)
+# @name loginAdmin
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Store Token from Response
+@jwtToken = {{loginAdmin.response.body.token}}
+
+### 1b. Customer Login
+# @name loginCustomer
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+  "username": "john",
+  "password": "password123"
+}
+
+### --------------------------------------------------------------------
+### 2. INVENTORY SERVICE (via API Gateway :8080)
+### --------------------------------------------------------------------
+
+### 2a. List all products in catalog
+GET http://localhost:8080/api/products
+Authorization: Bearer {{jwtToken}}
+
+### 2b. Get Product #55 details
+GET http://localhost:8080/api/products/55
+Authorization: Bearer {{jwtToken}}
+
+### 2c. Add New Product (Admin)
+POST http://localhost:8080/api/products
+Authorization: Bearer {{jwtToken}}
+Content-Type: application/json
+
+{
+  "name": "Sony WH-1000XM5 Wireless Headphones",
+  "availableQuantity": 30,
+  "reservedQuantity": 0
+}
+
+### 2d. Update Stock Manually (Admin)
+PUT http://localhost:8080/api/products/55/stock
+Authorization: Bearer {{jwtToken}}
+Content-Type: application/json
+
+{
+  "availableQuantity": 100,
+  "reservedQuantity": 0
+}
+
+### --------------------------------------------------------------------
+### 3. ORDER SERVICE (via API Gateway :8080)
+### --------------------------------------------------------------------
+
+### 3a. Create Order (Success flow -> Triggers Kafka order-placed -> inventory-updated -> CONFIRMED)
+# @name placeOrderSuccess
+POST http://localhost:8080/api/orders
+Authorization: Bearer {{jwtToken}}
+Content-Type: application/json
+
+{
+  "customerId": 101,
+  "productId": 55,
+  "quantity": 2
+}
+
+### Store created order ID
+@createdOrderId = {{placeOrderSuccess.response.body.orderId}}
+
+### 3b. Create Order with Insufficient Stock (Triggers Kafka order-placed -> order-out-of-stock -> OUT_OF_STOCK)
+POST http://localhost:8080/api/orders
+Authorization: Bearer {{jwtToken}}
+Content-Type: application/json
+
+{
+  "customerId": 101,
+  "productId": 58,
+  "quantity": 999
+}
+
+### 3c. Get Order Details by ID (Check status after Kafka asynchronous processing)
+GET http://localhost:8080/api/orders/{{createdOrderId}}
+Authorization: Bearer {{jwtToken}}
+
+### 3d. List all orders (Paginated & Sorted)
+GET http://localhost:8080/api/orders?page=0&size=10&sort=id,desc
+Authorization: Bearer {{jwtToken}}
+
+### 3e. Get orders by Customer ID
+GET http://localhost:8080/api/orders/customer/101
+Authorization: Bearer {{jwtToken}}
+
+### 3f. Cancel Order
+PUT http://localhost:8080/api/orders/{{createdOrderId}}/cancel
+Authorization: Bearer {{jwtToken}}
+
+### --------------------------------------------------------------------
+### 4. NOTIFICATION SERVICE (via API Gateway :8080)
+### --------------------------------------------------------------------
+
+### 4a. Get Recent Notification Logs (Shows Kafka consumer audit logs)
+GET http://localhost:8080/api/notifications
+Authorization: Bearer {{jwtToken}}
+
+### 4b. Get Notifications for Specific Order
+GET http://localhost:8080/api/notifications/order/{{createdOrderId}}
+Authorization: Bearer {{jwtToken}}
+
+### --------------------------------------------------------------------
+### 5. ACTUATOR & SYSTEM HEALTH CHECKS
+### --------------------------------------------------------------------
+
+### Gateway Health Check
+GET http://localhost:8080/actuator/health
+
+### Order Service Health Check
+GET http://localhost:8081/actuator/health
+
+### Inventory Service Health Check
+GET http://localhost:8082/actuator/health
+
+### Notification Service Health Check
+GET http://localhost:8083/actuator/health
